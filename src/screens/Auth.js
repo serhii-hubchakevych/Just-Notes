@@ -3,6 +3,7 @@ import React, { Component } from 'react';
 import { StyleSheet,  Text,  View } from 'react-native';
 import { Container, Item, Form, Input, Button, Label } from "native-base";
 import firebase from '../parts/Firebase';
+import {LoginButton, AccessToken} from 'react-native-fbsdk';
 
 
 export default class Auth extends Component {
@@ -28,7 +29,7 @@ export default class Auth extends Component {
               .auth()
               .createUserWithEmailAndPassword(email, password)
               .then(user => { 
-                    alert('SUCCESS').then(this.props.navigation.navigate('HomeScreen'))
+                    this.props.navigation.navigate('HomeScreen')
                }).catch((err) => {
                 if(this.state.email.length == 0){
                     alert('Password can`t be is empty')
@@ -128,6 +129,28 @@ export default class Auth extends Component {
                 <Text style={{color:"white", fontSize:20,}}>Sign Up</Text>
             </Button>
             </View>
+                <View style={{marginTop: 20, marginRight:0, flexDirection:'column', alignItems:'center'}}>
+                <LoginButton
+                    onLoginFinished={
+                        (error, result) => {
+                        if (error) {
+                            console.log("login has error: " + result.error);
+                        } else if (result.isCancelled) {
+                            console.log("login is cancelled.");
+                        } else {
+                            AccessToken.getCurrentAccessToken().then(
+                            (data) => {
+                                console.log(data.accessToken.toString())
+                                this.props.navigation.navigate('HomeScreen')
+                            }
+                            )
+                        }
+                        }
+                    }
+                    onLogoutFinished={() => console.log("logout.")}/>
+                    
+
+                </View>
             
             </Form>
             
