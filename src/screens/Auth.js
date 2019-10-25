@@ -1,9 +1,9 @@
 
 import React, { Component } from 'react';
-import { StyleSheet,  Text,  View } from 'react-native';
+import { StyleSheet,  Text,  View, AsyncStorage } from 'react-native';
 import { Container, Item, Form, Input, Button, Label } from "native-base";
-import firebase from '../parts/Firebase';
-import {LoginButton, AccessToken} from 'react-native-fbsdk';
+import Loader from "react-native-modal-loader";
+import {authUserApi} from '../networking/API'
 
 
 export default class Auth extends Component {
@@ -11,9 +11,13 @@ export default class Auth extends Component {
     constructor(props) {
         super(props);
         this.state = {
-          email: "",
-          password: "",
-          loginStatus: false,
+          userName: "",
+          userPassword: "",
+          isLoading: false,
+          userToken:"",
+          userId:"",
+          serverResponse:"",
+          asyncStorageToken: '',
         };
       }
 
@@ -22,136 +26,124 @@ export default class Auth extends Component {
           header: null,
       };
 
-      SignUp = (email, password) => {
-          console.log(this.state.password.length)
+      async componentDidMount() {
         try {
-          firebase
-              .auth()
-              .createUserWithEmailAndPassword(email, password)
-              .then(user => { 
-                    this.props.navigation.navigate('HomeScreen')
-               }).catch((err) => {
-                if(this.state.email.length == 0){
-                    alert('Password can`t be is empty')
-                }else if(this.state.password.length == 0){
-                    alert('Password can`t be is empty')
-                }else if(this.state.password.length>0 && this.state.password.length <6){
-                    alert('You password is too short (min 6 symbol)')
-                }
-               });
-        } catch (error) {
-          console.log(error.toString(error));
-        }
-      };
-      
-    Login = (email, password) => {
-        try {
-          firebase
-             .auth()
-             .signInWithEmailAndPassword(email, password)
-             .then(res => {
+            const value = await AsyncStorage.getItem('Token');
+            const asyncUserLogin = await AsyncStorage.getItem('UserName')
+            const asyncUserPassword = await AsyncStorage.getItem('UserPassword')
+            if (value !== null) {
                 this.setState({
-                    loginStatus: true
+                    isLoading:true,
                 })
-                // console.log(this.state.loginStatus)
-                this.props.navigation.navigate('HomeScreen')
-          }).catch((err) => {
-                if(this.state.email.length == 0){
-                    alert('Email can`t be is empty')
+                const newUser = {
+                    UserName: asyncUserLogin,
+                    UserPassword: asyncUserPassword
                 }
-                else if(this.state.password.length == 0){
-                    alert('Password can`t be is empty')
-                }else if(this.state.password.length>6 && this.state.email.length>5){
-                    alert('Password or login is incorect')
-                }else if(this.state.password.length>0 && this.state.password.length <6){
-                    alert('You password is too short (min 6 symbol)')
-                }
+                try {
+                    fetch('https://cb5eza7o22.execute-api.us-west-2.amazonaws.com/Prod/api/Login',
+                    {
+                        method: 'POST',
+                        headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                },
+                        body:JSON.stringify(newUser)}).then(response => response.json()).then((response)=>{
+                                var serverResponse = response
+                                    this.setState({
+                                        isLoading:false,
+                                    })
+                                    this.props.navigation.navigate('HomeScreen', {serverResponse})   
+                                
+                            }).catch((error) => {
+                                console.log('ERROR IS --------', error)
+                            })
+                        } 
+                catch (error) {
+                            console.log(error)
+                        }
 
-               });
-    } catch (error) {
-          console.log(error.toString(error));
+            }else {
+               console.log("Component Did Mount Auth Screen first error") 
+            }
+          } catch (error) {
+            console.log("Component Did Mount Auth Screen second error") 
+          }
+      }
+      async UNSAFE_componentWillReceiveProps() {
+        try {
+            this.setState({ 
+                userName: "",
+                userPassword: ""
+            })
         }
-      };
+        catch (error) {
+            console.log(error)
+        }
+    }
+
+
+    async authUser(){
+        this.setState({
+            isLoading:true,
+          })
+          let res = await authUserApi(this.state.userName, this.state.userPassword);
+          if (res != undefined){
+            this.setState({
+              isLoading:false,
+          })
+          this.props.navigation.navigate('HomeScreen', {res})
+          }else if(!res){
+                alert('Login or password is incorect!')
+                await AsyncStorage.setItem('Token', '');
+                await AsyncStorage.setItem('Login','');
+                await AsyncStorage.setItem('Password','');
+                this.setState({
+                    isLoading:false,
+                })
+                this.props.navigation.navigate('AuthScreen','screen:ddddd')
+          }
+        }
     
-    // validate (text, type)
-    // {
-    //     let userEmail = ""
-    //     userEmail = text
-    //     if(type=='username')
-    //     {
-    //         let result = userEmail.indexOf("@")
-    //         if (result > 0)
-    //         {
-    //             this.setState({
-    //                 validation: true,
-    //                 email: userEmail
-    //             })
-    //         }else
-    //         {
-    //             this.setState({
-    //                 validation: true,
-    //                 email: userEmail
-    //             })
-    //         }
-    //     }
-    // }
 
 
-      render() {  
+    render() {  
     
     return (
             
         <Container style={styles.container}>
-            <View style={{ alignItems:"center"}}>
-                <Text style={{ fontSize:40, fontWeight:"bold", fontFamily:'Tangerine' }}>Just Notes</Text>
-            </View>
-                
-            <Form style={{width:'96%'}}>
-            <Item floatingLabel>
-                <Label>Email</Label>
-                <Input autoCapitalize="none" autoCorrect={false} onChangeText={email => this.setState({ email })}/>
-            </Item>
-            <Item floatingLabel>
-                <Label>Password</Label>
-                <Input
-                secureTextEntry={true}
-                autoCapitalize="none"
-                autoCorrect={false}
-                // onTouchEnd={(text) => validate(text, 'username')}
-                onChangeText={password => this.setState({ password })}
-                />
-            </Item>
-            <View style={{flexDirection:"row", justifyContent:"space-evenly"}}>
-            <Button full rounded success style={{marginTop: 20, width:"45%", marginLeft:15}} onPress={() => this.Login(this.state.email, this.state.password)} >
-                <Text style={{color:"white", fontSize:20}}>Login</Text>
-            </Button>
-            <Button full rounded style={{ marginTop: 20, width:"45%", marginRight:0}} onPress={() => this.SignUp(this.state.email, this.state.password)} > 
-                <Text style={{color:"white", fontSize:20,}}>Sign Up</Text>
-            </Button>
-            </View>
-                <View style={{marginTop: 20, marginRight:0, flexDirection:'column', alignItems:'center'}}>
-                <LoginButton
-                    onLoginFinished={
-                        (error, result) => {
-                        if (error) {
-                            console.log("login has error: " + result.error);
-                        } else if (result.isCancelled) {
-                            console.log("login is cancelled.");
-                        } else {
-                            AccessToken.getCurrentAccessToken().then(
-                            (data) => {
-                                console.log(data.accessToken.toString())
-                                this.props.navigation.navigate('HomeScreen')
-                            }
-                            )
-                        }
-                        }
-                    }
-                    onLogoutFinished={() => console.log("logout.")}/>
-                    
-
-                </View>
-            
+            <View style={styles.titleView}>
+                <Text style={styles.title}>Just Notes</Text>
+            </View>    
+            <Form style={styles.form}>
+                <Item floatingLabel>
+                    <Label style={styles.formLabelAndInput}>Username</Label>
+                    <Input 
+                    autoCapitalize="none" 
+                    autoCorrect={false} 
+                    onChangeText={userName => this.setState({ userName })} 
+                    value={this.state.userName} 
+                    style={styles.formLabelAndInput}/>
+                </Item>
+                <Item floatingLabel>
+                    <Label style={styles.formLabelAndInput}>Password</Label>
+                    <Input
+                    style={styles.formLabelAndInput}
+                    secureTextEntry={true}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={this.state.userPassword}
+                    onChangeText={userPassword => this.setState({ userPassword })}
+                    />
+                </Item>
+            <View style={styles.buttonsView}>
+                <Button full rounded success style={styles.loginButton} onPress={() => this.authUser()}> 
+                    <Text style={styles.logitButtonText}>Login</Text>
+                </Button>
+                    <Loader loading={this.state.isLoading} color="#ff66be" />
+                <Button full rounded style={styles.signInButton} onPress={() => this.props.navigation.navigate('RegistrationScreen')}> 
+                    <Text style={styles.signInButtonText}>Sign Up</Text>
+                </Button>
+            </View>            
             </Form>
             
 
@@ -163,10 +155,16 @@ export default class Auth extends Component {
 
 const styles = StyleSheet.create(
     {
-        container: {
-            flex: 1,
-            justifyContent: 'center',
-          }
+        container: {flex: 1,justifyContent: 'center',},
+        title:{fontSize:70, fontFamily:'Tangerine-Bold'},
+        titleView:{alignItems:"center"},
+        form:{width:'96%'},
+        formLabelAndInput:{fontFamily:'TurretRoad-Regular'},
+        buttonsView:{flexDirection:"row", justifyContent:"space-evenly"},
+        loginButton:{marginTop: 20, width:"45%", marginLeft:15},
+        logitButtonText:{color:"white", fontSize:20, fontFamily:'TurretRoad-Regular'},
+        signInButton:{marginTop: 20, width:"45%", marginRight:0},
+        signInButtonText:{color:"white", fontSize:20, fontFamily:'TurretRoad-Regular'},
     })
 
 
