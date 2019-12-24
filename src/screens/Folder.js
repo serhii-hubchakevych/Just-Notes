@@ -1,18 +1,17 @@
 // Home.js
 
 import React, { Component } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TouchableHighlight, TextInput, Button } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TouchableHighlight, TextInput, AsyncStorage, Picker } from 'react-native';
 import { Container, Header, Left, Right, Icon, } from 'native-base';
 import Swipeable from 'react-native-swipeable';
-import Loader from "react-native-modal-loader";
-import { editUserFolderApi, deleteUserFolderApi, addUserFolderApi, deleteUserDataApi, getUserDataApi, getUserDataInFolder } from "../networking/API"
-import Dialog, { DialogContent } from 'react-native-popup-dialog';
-import { Menu, MenuOptions, MenuOption, MenuTrigger, renderers } from 'react-native-popup-menu';
+import { deleteUserDataApi,shareUserNoteAccessApi, getSharedDataInFolders, syncOfflineData } from "../networking/API"
+import Dialog, { DialogContent, DialogTitle, SlideAnimation, DialogFooter, DialogButton } from 'react-native-popup-dialog';
+import OfflineNotice from '../parts/OfflineNotice'
 
 
 
 
-class Home extends Component {
+class Folder extends Component {
 
     static navigationOptions =
         {
@@ -21,316 +20,434 @@ class Home extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            userNotesAndFolders: ['',''],
-            userToken: '',
+            userNotes:[],
             folderId: '',
+            noteId:'',
             parentFolderId: null,
             navigationFlag: false,
-            visibleModalEditFolderName: false,
-            visibleModalAddNewFolder: false,
-            folderName: '',
-            folderEditName: '',
-            opened: false,
-            currentFolderId:'',
-            
-        };
+            visible: false,
+            visibleModalShareNoteAccess: false,
+            visibleModalForReadNote: false,
+            userEmailForShare: '',
+            userRole: 'Reader',
+            noteIdForSharing: '',
+            noteTitleForReading: '',
+            noteContentForReading: '',
+            visibleModalShareError:false,
+            visibleModalShareSuccess:false,
+            disableConfirmFolderButton:false,
+            screenFlag:'',
+            connectionOffline:false,
+            visibleModalForAccessDenied:false,
+                };
     }
     swipeable = null;
 
     async componentDidMount() {
-        this.setState({
-            isLoading: true,
-        })
         const { navigation } = this.props;
+
         let folderId = JSON.stringify(navigation.getParam('folderId', 'ERROR'));
-        let userToken = JSON.stringify(navigation.getParam('userToken', 'ERROR'));
         folderId = JSON.parse(folderId)
-        userToken = JSON.parse(userToken)
-        let res = await getUserDataInFolder(userToken, folderId)
-        if (res != null) {
-            this.setState({
-                folderId: folderId,
-                userNotesAndFolders: res,
-                userToken: userToken
-            })
-        } else {
-            this.setState({
-                userNotesAndFolders: []
-            })
+        let screenFlag = JSON.stringify(navigation.getParam('screenFlag', 'ERROR'));
+        screenFlag = JSON.parse(screenFlag)
+        let userRole = JSON.stringify(navigation.getParam('userRole', 'ERROR'));
+        userRole = JSON.parse(userRole)
+        let asyncNotesArray = await AsyncStorage.getItem('Notes');
+        let arrayAsyncUserNotes = JSON.parse(asyncNotesArray)
+        let userNotesInFolder;
+        console.log(screenFlag)
+        if(screenFlag == 'Home'){
+            userNotesInFolder = arrayAsyncUserNotes.filter(arrayAsyncUserNotes => arrayAsyncUserNotes.inFolder == folderId)
+        }else {
+            userNotesInFolder = await getSharedDataInFolders(folderId);
+        }
+        this.setState({
+            folderId: folderId,
+            userNotes: userNotesInFolder,
+            screenFlag: screenFlag,
+            userRole: userRole
+        })
+        if(this.swipeable != null){
+            await this.swipeable.recenter()
         }
     }
 
     async UNSAFE_componentWillReceiveProps() {
-        this.swipeable.recenter()
-        if (this.state.navigationFlag) {
-            var res = await getUserDataInFolder(this.state.userToken, this.state.parentFolderId)
-            this.swipeable.recenter()
-            if (res != null) {
-                this.setState({
-                    userNotesAndFolders: res
-                }, ()=>this.swipeable.recenter())
-                res = res[res.length - 1]
-                if (res.previouseParent != null) {
-                    this.setState({
-                        parentFolderId: res.previouseParent,
-                        navigationFlag: false
-                    }, ()=>this.swipeable.recenter())
-                }
-                
-                else if (res.previouseParent == null) {
-                    this.setState({
-                        parentFolderId: res.previouseParent,
-                        navigationFlag: false
-                        
-                    }, ()=>this.swipeable.recenter())
-                }
-            } else {
-                this.setState({
-                    userNotesAndFolders: []
-                }, ()=>this.swipeable.recenter())
-            }
-        } else {
-            var res = await getUserDataInFolder(this.state.userToken, this.state.folderId)
-            this.swipeable.recenter()
-            if (res != null) {
-                this.setState({
-                    userNotesAndFolders: res
-                }, ()=>this.swipeable.recenter())
-                res = res[res.length - 1]
-                if (res.previouseParent != null) {
-                    this.setState({
-                        parentFolderId: res.previouseParent,
-                        navigationFlag: false
-                    }, ()=>this.swipeable.recenter())
-                }
-            } else {
-                this.setState({
-                    userNotesAndFolders: []
-                }, ()=>this.swipeable.recenter())
-            }
+        const { navigation } = this.props;
+
+        let folderId = JSON.stringify(navigation.getParam('folderId', 'ERROR'));
+        folderId = JSON.parse(folderId)
+        let screenFlag = JSON.stringify(navigation.getParam('screenFlag', 'ERROR'));
+        screenFlag = JSON.parse(screenFlag)
+        let asyncNotesArray = await AsyncStorage.getItem('Notes');
+        let arrayAsyncUserNotes = JSON.parse(asyncNotesArray)
+        let userNotesInFolder;
+        if(screenFlag == 'Home'){
+            userNotesInFolder = arrayAsyncUserNotes.filter(arrayAsyncUserNotes => arrayAsyncUserNotes.inFolder == folderId)
+        }else {
+            userNotesInFolder = await getSharedDataInFolders(folderId);
         }
-
-    }
-
-    updateFolderData(folderId) {
         this.setState({
             folderId: folderId,
-        }, () => this.props.navigation.navigate('FolderScreen', 'screen:ddddd'))
-
-    }
-
-    navigationOnFolder() {
-        if (this.state.parentFolderId == null) {
-            this.props.navigation.navigate('HomeScreen')
-        } else{
-            this.setState({
-                navigationFlag: true,
-            }, () => this.props.navigation.navigate('FolderScreen', 'screen:ddddd'))
+            userNotes: userNotesInFolder,
+            screenFlag: screenFlag,
+        })
+        if(this.swipeable != null){
+            await this.swipeable.recenter()
         }
-
+        
     }
 
-    rightSwipeButtons(noteId, noteName, noteContent) {
+    rightSwipeButtons(noteId, noteName, noteContent, userRole) {
         return [
             <TouchableHighlight style={styles.rightSwipeFirstContainer}>
-                <Icon size={30} name="ios-trash" style={styles.rightSwipeIcons} onPress={() => this.deleteNote(noteId)} />
+                <Icon size={30} name="ios-trash" style={styles.rightSwipeIcons} onPress={() => this.deleteNote(noteId, userRole)} />
             </TouchableHighlight>,
             <TouchableHighlight style={styles.rightSwipeSecondContainer}>
-                <Icon size={30} name="ios-document" style={styles.rightSwipeIcons} onPress={() => this.props.navigation.navigate('EditNoteScreen', {
-                    currentNoteId: noteId,
-                    currentNoteName: noteName,
-                    currentNoteContent: noteContent,
-                    userToken: this.state.userToken,
-                    inFolder: true
-                })} />
+                <Icon size={30} name="ios-document" style={styles.rightSwipeIcons} onPress={() => this.editCurrentNote(noteId, noteName, noteContent, userRole)} />
+            </TouchableHighlight>,
+            <TouchableHighlight style={styles.rightSwipeThirdContainer}>
+                <Icon size={30} name="md-share" style={styles.rightSwipeIcons} onPress={() => this.setState({ visibleModalShareNoteAccess: true, noteIdForSharing: noteId })} />
             </TouchableHighlight>]
     }
 
-
-    contextMenu(folderId) {
-
-        this.setState({
-            opened: true,
-            currentFolderId: folderId
+    async deleteNote(noteId, userRole) {
+        if(this.state.screenFlag == 'Home'){
+        let asyncUserNotes = await AsyncStorage.getItem('Notes');
+        asyncUserNotes = JSON.parse(asyncUserNotes)
+        let arrayAsyncUserNotes = []
+        arrayAsyncUserNotes = asyncUserNotes
+        arrayAsyncUserNotes.map((item,index) => {
+          if (item.localId == noteId){
+             arrayAsyncUserNotes.splice(index, 1)
+          }
         })
-    }
-
-    async createFolder() {
-        this.setState({
-            isLoading: true,
-        })
-        let userToken = this.state.userToken
-        let folderName = this.state.folderName
-        let folderId = this.state.folderId
-        let res = await addUserFolderApi(userToken, folderName, folderId)
-
-        if (res) {
-            this.setState({
-                isLoading: false,
-                visibleModalAddNewFolder: false,
-            })
-            this.props.navigation.navigate('FolderScreen', 'screen:ddddd')
-        } else {
-            alert('Add Server error')
+        if( this.state.connectionOffline ){
+            await deleteUserDataApi(noteId)
         }
-    }
-    async editFolderName() {
-        this.setState({
-            isLoading: true,
-        })
-        let userToken = this.state.userToken
-        let folderName = this.state.folderEditName
-        let folderId = this.state.currentFolderId
-        let res = await editUserFolderApi(userToken, folderName, folderId)
-
-        if (res) {
+       
+        await AsyncStorage.setItem('Notes', JSON.stringify(arrayAsyncUserNotes))
+        this.props.navigation.navigate('FolderScreen', 'screen:ddd')
+        } else if (this.state.screenFlag == 'Shared' && userRole != 'Reader'){
+            await deleteUserDataApi(noteId)
+            this.props.navigation.navigate('FolderScreen', 'screen:ddd')
+        } else if ( this.state.screenFlag == 'Shared' && userRole == 'Reader' ){
             this.setState({
-                isLoading: false,
-                visibleModalEditFolderName: false,
-            })
-            this.props.navigation.navigate('FolderScreen', 'screen:ddddd')
-        } else {
-            alert('Edit Server error')
-            this.setState({
-                isLoading: false,
+                visibleModalForAccessDenied:true
             })
         }
     }
 
-    async deleteFolder(folderId) {
-        this.setState({
-            isLoading: true,
-        })
-        let userToken = this.state.userToken
-        let res = await deleteUserFolderApi(userToken, folderId)
-        console.log('Folder result', res)
+    editCurrentNote(noteId, noteName, noteContent, userRole) {
+        if (userRole == 'Reader') {
+          this.setState({
+            visibleModalForAccessDenied: true,
+          });
+        } else if ( userRole == 'Editor' ){
+          this.props.navigation.navigate('EditNoteScreen', {
+            currentNoteId: noteId,
+            currentNoteName: noteName,
+            currentNoteContent: noteContent,
+            navigationFlag: 'Shared',
+            inFolder:true
+          });
+        } else {
+            this.props.navigation.navigate('EditNoteScreen', {
+                currentNoteId: noteId,
+                currentNoteName: noteName,
+                currentNoteContent: noteContent,
+                navigationFlag: 'Folder',
+                inFolder:true
+              });
+        }
+      }
+
+
+    async shareNoteAccess() {
+        let res = await shareUserNoteAccessApi(this.state.noteIdForSharing, this.state.userEmailForShare, this.state.userRole)
         if (res) {
             this.setState({
-                isLoading: false,
-                opened: false
-            })
+                visibleModalShareNoteAccess: false,
+                visibleModalShareSuccess:true,
+                disableConfirmFolderButton:true
+            }, () => this.swipeable.recenter())
             this.props.navigation.navigate('FolderScreen', 'screen:ddddd')
         } else {
-            alert('Delete Server error')
+            this.setState({
+                visibleModalShareNoteAccess: false,
+                visibleModalShareError:true,
+                disableConfirmFolderButton:true
+            }, () => this.swipeable.recenter())
         }
     }
 
+    
+    readCurrentNote(noteTitle, noteContent, noteId, userRole) {
+        this.setState({
+            noteTitleForReading: noteTitle,
+            noteContentForReading: noteContent,
+            visibleModalForReadNote: true,
+            noteId: noteId,
+            userRole: userRole
+        })
 
-    async deleteNote(noteId) {
+    }
+
+    closeModalOnHardwareButtonPress(){
+        this.setState({
+            visibleModalForReadNote:false,
+            visibleModalShareError:false,
+            visibleModalShareSuccess:false,
+            visibleModalShareNoteAccess:false
+        })
+        return this.props.navigation.navigate('FolderScreen');
+    }
+
+    closeModalAndGoToEditNoteScreen(){
+        if ( this.state.screenFlag == 'Home' ){
+            this.setState({visibleModalForReadNote:false})
+            this.props.navigation.navigate('EditNoteScreen', {
+                currentNoteId: this.state.noteId,
+                currentNoteName: this.state.noteTitleForReading,
+                currentNoteContent: this.state.noteContentForReading,
+                noteIdForSharing:this.state.noteId,
+                navigationFlag:'Folder'
+            })
+        } else if ( this.state.screenFlag == 'Shared' && this.state.userRole == 'Editor' ){
+            this.setState({visibleModalForReadNote:false})
+            this.props.navigation.navigate('EditNoteScreen', {
+                currentNoteId: this.state.noteId,
+                currentNoteName: this.state.noteTitleForReading,
+                currentNoteContent: this.state.noteContentForReading,
+                noteIdForSharing:this.state.noteId,
+                navigationFlag:'Shared',
+                inFolder:true
+            })
+        }  else if ( this.state.screenFlag == 'Shared' && this.state.userRole == 'Reader' ){
+            this.setState({
+                visibleModalForReadNote:false,
+                visibleModalForAccessDenied:true
+            })
+        }
+    }
+
+    closeModalAndDeleteNote(){
+        if ( this.state.screenFlag == 'Home' ){
+            this.setState({visibleModalForReadNote:false})
+            this.deleteNote(this.state.noteId)
+        } else if ( this.state.screenFlag == 'Shared' ){
+            this.setState({
+                visibleModalForReadNote:false
+            }, ()=> this.deleteNote( this.state.noteId, this.state.userRole ))
+        }
+    }
+
+    closeModalAndShareNote(){
+        this.setState({visibleModalForReadNote:false})
+        this.setState({visibleModalShareNoteAccess:true})
+    }
+
+    checkUserRoleAndCreateNote(){
+        if ( this.state.userRole == 'Editor' && this.state.screenFlag == 'Shared'){
+            this.props.navigation.navigate('AddNoteScreen', { navigationFlag:'Folder', inFolder:this.state.folderId })
+        } else if ( this.state.userRole == 'Reader' && this.state.screenFlag == 'Shared' ){
+            this.setState({
+                visibleModalForAccessDenied:true
+            })
+        } else {
+            this.props.navigation.navigate('AddNoteScreen', { navigationFlag:'Folder', inFolder:this.state.folderId })
+        }
+    }
+
+    getCallbackDataFromOfflineNotice = (callbackData) => {
+        this.setState({
+            connectionOffline:callbackData
+        })
+        console.log('CONNECTION', this.state.connectionOffline)
+        if ( this.state.connectionOffline == true){
+            this.syncAllDataWhenConnectionIsOnline()
+        }
+      }
+
+      async syncAllDataWhenConnectionIsOnline(){
+        let asyncLoginUserData = await AsyncStorage.getItem('asyncLoginUserData');
+        asyncLoginUserData = JSON.parse(asyncLoginUserData);
+        let asyncNotesArray = await AsyncStorage.getItem('Notes');
+        asyncNotesArray = JSON.parse(asyncNotesArray)
+        let asyncFoldersArray = await AsyncStorage.getItem('Folders');
+        asyncFoldersArray = JSON.parse(asyncFoldersArray)
+        if(asyncFoldersArray == null ){
+            asyncFoldersArray = [];
+        } else if(asyncNotesArray == null){
+            asyncNotesArray = [];
+        }
+        let userNotesAndFolders = asyncFoldersArray.concat(asyncNotesArray)
+        if ( this.state.connectionOffline == true){
+            await syncOfflineData(userNotesAndFolders)
+        }
         
-        this.setState({
-            isLoading: true,
-        })
-        this.swipeable.recenter()
-        let userToken = this.state.userToken
-        let res = await deleteUserDataApi(noteId, userToken)
-        this.setState({
-            isLoading: false,
-        })
-        if (res) {
-            this.props.navigation.navigate('FolderScreen', 'screen:ddddd')
-        } else {
-            alert('Server error')
-        }
     }
 
     render() {
         return (
             <Container >
+              <OfflineNotice callbackOfflineNotice={this.getCallbackDataFromOfflineNotice} />
                 <Header style={styles.header} >
-                    <Left style={styles.headerLeft}>
-                        <Icon name="ios-arrow-back" style={styles.headerLeftIcon} onPress={() => this.navigationOnFolder()} />
+                    <Left style={styles.headerLeft} >
+                    <TouchableOpacity style={{width:30,}} onPress={() => this.props.navigation.goBack()}>
+                        <Icon name="ios-arrow-back" style={styles.headerLeftIcon}  />
+                    </TouchableOpacity>
                     </Left>
                     <Right style={{ flexDirection: 'row' }}>
-                        <Icon name="ios-document" style={styles.headerRightText} onPress={() => this.props.navigation.navigate('AddNoteScreen', { userToken: this.state.userToken, folderId:this.state.folderId, parentFolderId:this.state.parentFolderId })}></Icon>
-                        <Icon name="ios-folder" style={styles.headerRightText} onPress={() => { this.setState({ visibleModalAddNewFolder: true }) }}></Icon>
+                        <Icon name="add-circle" type='MaterialIcons' style={styles.headerRightText} onPress={() => this.checkUserRoleAndCreateNote()}></Icon>
                     </Right>
                 </Header>
-               
                 <ScrollView>
-
-                {
-                this.state.userNotesAndFolders.length > 1 ? 
+         {       
+                this.state.userNotes.length != 0 ?
                             <View>
-                    {
-                        this.state.userNotesAndFolders.map(item => {
-                            if (item.folderName != null) {
-                                return (
+                                {
+                                    this.state.userNotes.map(item => {
+                                        if(item.inFolder == this.state.folderId){
+                                            return (
+                                                <Swipeable key={item.localId} onRef={ref => this.swipeable = ref} rightButtons={this.rightSwipeButtons(item.localId, item.name, item.content, item.role)} style={styles.item}>
+                                                        <TouchableOpacity style={styles.noteView} onPress={() => this.readCurrentNote(item.name, item.content, item.localId, item.role)}>
+                                                        <View>
+                                                            <Icon name="ios-document" style={{marginTop:'70%', fontSize:40, color:'orange'}}></Icon>
+                                                        </View>
+                                                        <View style={{ marginLeft: 11}}>
+                                                            <Text numberOfLines={1} style={styles.noteName}>{item.name}</Text>
+                                                            <Text style={styles.noteDate}>{item.noteDate}</Text>
+                                                            <Text numberOfLines={1} style={styles.noteContent}>{item.content}</Text>
+                                                        </View>
+                                                        </TouchableOpacity>
+                                                </Swipeable>
+                                            )
+                                        }
+                                    })
+                                }
+                            </View>
 
-                                    <TouchableOpacity key={item.id} onPress={() => this.updateFolderData(item.id)} style={styles.item} onLongPress={() => this.contextMenu(item.id)}>
-                                        <View style={styles.folderView}>
-                                            <Icon name="ios-folder" style={{ color: 'orange' }} />
-                                            <Text numberOfLines={1} style={styles.folderName}>{item.folderName}</Text>
-                                        </View>
-                                    </TouchableOpacity>
-
-
-                                )
-                            }
-                            else if (item.name != null) {
-                                return (
-                                    <Swipeable onRef={ref => this.swipeable = ref} rightButtons={this.rightSwipeButtons(item.id, item.name, item.content)} style={styles.item} key={item.id}>
-                                        <View style={styles.noteView}>
-                                            <Text numberOfLines={1} style={styles.noteName}>{item.name}</Text>
-                                            <Text style={styles.noteContent} >{item.noteDate.substring(0, 10)} {item.noteDate.substring(11, 19)}</Text>
-                                            <Text numberOfLines={2} style={styles.noteContent}>{item.content}</Text>
-                                        </View>
-                                    </Swipeable>
-                                )
-                            }
-
-
-
-                        })
-
+                            : <TouchableOpacity style={{ alignItems: "center", marginTop: '60%'}} onPress={() => this.props.navigation.navigate('AddNoteScreen', { navigationFlag:'Folder', inFolder:this.state.folderId })}><Text style={{ fontSize: 20, fontFamily: 'OpenSans-Regular' }}>Tap to add your first note</Text></TouchableOpacity>
                     }
-                    </View>
-                            
-                            : <Text style={{ textAlign: "center", marginTop:100 }}>Add your first note</Text>
-                }
-
-                </ScrollView>
-                <Menu opened={this.state.opened} renderer={renderers.SlideInMenu} onBackdropPress={()=>this.setState({opened:false})}>
-                    <MenuTrigger />
-                    <MenuOptions style={{ alignItems: 'center' }}>
-                        <MenuOption style={{ borderBottomWidth: 1, borderColor: "gray",  }} onSelect={() => this.setState({ opened: false, visibleModalEditFolderName: true })}>
-                            <Text style={{ fontSize: 25, fontFamily: 'AlegreyaSC-Regular', color:'orange',  }}>Edit folder name</Text>
-                        </MenuOption>
-                        <MenuOption onSelect={() => this.deleteFolder(this.state.currentFolderId)}>
-                            <Text style={{ fontSize: 25, fontFamily: 'AlegreyaSC-Regular', color:'red'  }} >Delete folder</Text>
-                        </MenuOption>
-                    </MenuOptions>
-                </Menu>
 
 
-                <Dialog visible={this.state.visibleModalAddNewFolder} onTouchOutside={() => { this.setState({ visibleModalAddNewFolder: false }); }}>
+        </ScrollView>
+                <Dialog footer={<DialogFooter>
+                    <DialogButton
+                        text="CLOSE"
+                        onPress={() => this.setState({ visibleModalShareNoteAccess: false })}
+                    />
+                    <DialogButton
+                        text="CONFIRM"
+                        onPress={() => this.shareNoteAccess()}
+                    />
+                    </DialogFooter>} dialogAnimation={new SlideAnimation({ slideFrom: 'bottom' })} width={0.9} dialogTitle={<DialogTitle title="SHARE NOTE" />} visible={this.state.visibleModalShareNoteAccess} onTouchOutside={() => { this.setState({ visibleModalShareNoteAccess: false }) }}>
                     <DialogContent style={{ alignItems: 'center' }}>
-                        <Icon size={1} name="ios-folder" style={{ color: 'orange', marginTop: 20 }} />
-                        <TextInput style={{ textAlign: 'center' }} placeholder="Folder name" onChangeText={folderName => this.setState({ folderName: folderName })}></TextInput>
-                        <View style={{ flexDirection: 'row' }}>
-                            <Button onPress={() => this.createFolder()} title="Create" />
-                            <Text>   </Text>
-                            <Button title="Close" onPress={() => this.setState({ visibleModalAddNewFolder: false })} />
-                        </View>
+                        <Icon name="md-share" style={{ color: 'orange', marginTop: 30, fontSize: 40 }} />
+                        <TextInput style={{ textAlign: 'center', fontSize: 20, borderBottomWidth: 1, borderBottomColor: 'silver', width: '100%' }} placeholder="Enter user email" onChangeText={userEmailForShare => this.setState({ userEmailForShare: userEmailForShare })}></TextInput>
+                        <Text style={{ fontSize: 20, marginTop: 20 }}>Select the user role</Text>
+                        <Icon name="ios-contact" style={{ color: 'orange', marginTop: 10, fontSize: 40 }} />
+                        <Picker
+                            selectedValue={this.state.userRole}
+                            style={{ height: 50, width: '100%' }}
+                            onValueChange={(itemValue, itemIndex) =>
+                                this.setState({ userRole: itemValue })
+                            }>
+                            <Picker.Item label="Only read notes/folders" value="Reader" />
+                            <Picker.Item label="Editing notes/folders" value="Editor" />
+                        </Picker>
+                    </DialogContent>
+                </Dialog> 
+                <Dialog onHardwareBackPress={()=>this.closeModalOnHardwareButtonPress()} footer={<DialogFooter style={{flexDirection:'row', height:'10%'}}>
+                    <DialogButton
+                        text="CLOSE"
+                        style={{width:'25%', }}
+                        onPress={() => this.setState({ visibleModalForReadNote: false })}
+                    />
+                    <DialogButton
+                       text="EDIT"
+                        style={{width:'25%'}}
+                        onPress={()=> this.closeModalAndGoToEditNoteScreen()}
+                    />
+                    <DialogButton
+                       text="SHARE"
+                       style={{width:'25%'}}                  
+                       onPress={()=> this.closeModalAndShareNote()}
+                      
+                    />
+                     <DialogButton
+                       text="DELETE"
+                        style={{width:'25%'}}
+                        onPress={() => this.closeModalAndDeleteNote()}   
+                    />
+                   
+                    </DialogFooter>} dialogAnimation={new SlideAnimation({ slideFrom: 'bottom' })} width={1} height={0.95} dialogTitle={<DialogTitle title={this.state.noteTitleForReading} />} visible={this.state.visibleModalForReadNote} onTouchOutside={() => { this.setState({ visibleModalForReadNote: false }); }}>
+                    <ScrollView>
+                        <DialogContent>
+
+                            <Text style={{paddingTop:10, paddingBottom:10}}>{this.state.noteContentForReading}</Text>
+
+                        </DialogContent>
+                    </ScrollView>
+                </Dialog>
+                
+                
+                
+                <Dialog onHardwareBackPress={()=>this.closeModalOnHardwareButtonPress()} footer={<DialogFooter>
+                    <DialogButton
+                        text="CLOSE"
+                        onPress={() => this.setState({ visibleModalShareError: false })}
+                    />
+                </DialogFooter>} dialogAnimation={new SlideAnimation({ slideFrom: 'bottom' })} width={1} dialogTitle={<DialogTitle title="SHARE ERROR" />} visible={this.state.visibleModalShareError} onTouchOutside={() => { this.setState({ visibleModalShareError: false }); }}>
+                    <DialogContent>
+                        <View style={{ alignItems: 'center' }}><Icon name="ios-alert" style={{ color: 'red', marginTop: 20, fontSize: 50 }} /><Text style={{ fontSize: 20, fontFamily: 'OpenSans-Regular', textAlign: 'center' }}>User not found, make sure the email you entered is correct</Text></View>
                     </DialogContent>
                 </Dialog>
 
-
-
-
-                <Dialog visible={this.state.visibleModalEditFolderName} onTouchOutside={() => { this.setState({ visibleModalEditFolderName: false }); }}>
-                    <DialogContent style={{ alignItems: 'center' }}>
-                        <Icon name="ios-folder" style={{ color: 'orange', marginTop: 20 }} />
-                        <TextInput style={{ textAlign: 'center' }} placeholder="Edit folder name" onChangeText={folderEditName => this.setState({ folderEditName: folderEditName })}></TextInput>
-                        <View style={{ flexDirection: 'row' }}>
-                            <Button title="Edit" onPress={() => this.editFolderName()} />
-                            <Text>   </Text>
-                            <Button title="Close" onPress={() => this.setState({ visibleModalEditFolderName: false })} />
-                        </View>
+                <Dialog onHardwareBackPress={()=>this.closeModalOnHardwareButtonPress()} footer={<DialogFooter>
+                    <DialogButton
+                        text="CLOSE"
+                        onPress={() => this.setState({ visibleModalShareSuccess: false })}
+                    />
+                </DialogFooter>} dialogAnimation={new SlideAnimation({ slideFrom: 'bottom' })} width={1} dialogTitle={<DialogTitle title="SUCCESS" />} visible={this.state.visibleModalShareSuccess} onTouchOutside={() => { this.setState({ visibleModalShareSuccess: false }); }}>
+                    <DialogContent>
+                        <View style={{ alignItems: 'center' }}><Icon name="ios-checkmark-circle" style={{ color: 'green', marginTop: 20, fontSize: 50 }} /><Text style={{ fontSize: 20, fontFamily: 'OpenSans-Regular', textAlign: 'center' }}>Access has been successfully added for {this.state.userEmailForShare} user</Text></View>
                     </DialogContent>
                 </Dialog>
-
-
+                <Dialog
+                    footer={
+                        <DialogFooter>
+                        <DialogButton
+                            text="CLOSE"
+                            onPress={() =>
+                            this.setState({visibleModalForAccessDenied: false})
+                            }
+                        />
+                        <DialogButton
+                            text="GET ACCESS"
+                            onPress={() => alert('COMING SOON')}
+                        />
+                        </DialogFooter>
+                    }
+                    dialogAnimation={new SlideAnimation({slideFrom: 'bottom'})}
+                    width={0.9}
+                    dialogTitle={<DialogTitle title="ACCESS DENIED" />}
+                    visible={this.state.visibleModalForAccessDenied}
+                    onTouchOutside={() => {
+                        this.setState({visibleModalForAccessDenied: false});
+                    }}>
+                    <DialogContent style={{alignItems: 'center'}}>
+                        <Icon
+                        name="ios-alert"
+                        style={{color: 'red', marginTop: 20, fontSize: 50}}
+                        />
+                        <Text>
+                        You have no rights to manipulate this object. You can claim the
+                        rights by clicking the button below.
+                        </Text>
+                    </DialogContent>
+                    </Dialog>
 
             </Container>
 
@@ -340,15 +457,16 @@ class Home extends Component {
 
 const styles = StyleSheet.create({
     item: { borderBottomWidth: 1, borderColor: "lightgray", width: '100%', },
-    noteView: { paddingLeft: 20, paddingTop: 10, paddingBottom: 10, paddingRight: 20, },
+    noteView: { paddingLeft: 20, paddingTop: 10, paddingBottom: 10, paddingRight: 20, flexDirection: 'row' },
     folderView: { paddingLeft: 20, paddingTop: 10, paddingBottom: 10, paddingRight: 20, flexDirection: 'row' },
-    noteName: { fontSize: 25, fontFamily: 'AlegreyaSC-Bold' },
-    folderName: { fontSize: 20, fontFamily: 'AlegreyaSC-Bold', marginLeft: 10 },
-    noteContent: { fontFamily: 'AlegreyaSC-Regular' },
+    noteName: { fontSize: 20, fontFamily: 'OpenSans-SemiBold' },
+    folderName: { fontSize: 20, marginLeft: 10, fontFamily: 'OpenSans-SemiBold' },
+    noteContent: { fontFamily: 'OpenSans-Regular' },
+    noteDate: { marginTop: 5, marginBottom: 5, fontFamily: 'OpenSans-Regular' },
     header: { backgroundColor: 'white', },
     headerLeft: { flexDirection: 'row' },
     headerLeftIcon: { color: 'orange', marginLeft: '10%', fontSize: 30 },
-    headerRightText: { color: 'orange', fontSize: 25, paddingLeft: 20, paddingRight:10 },
+    headerRightText: { color: 'orange', fontSize: 35, paddingLeft: 20, paddingRight: 10 },
     leftSwipeContainer: { backgroundColor: 'white', height: '100%', justifyContent: 'center', alignItems: 'flex-end', paddingRight: 30, borderTopWidth: 0, borderColor: "lightgray", },
     leftSwipeContainerIcon: { color: 'green' },
     rightSwipeFirstContainer: { backgroundColor: 'red', height: '100%', justifyContent: 'center', paddingLeft: 30 },
@@ -356,7 +474,8 @@ const styles = StyleSheet.create({
     rightSwipeSecondContainer: { backgroundColor: 'orange', height: '100%', justifyContent: 'center', paddingLeft: 30 },
     searchInput: { padding: 10, borderColor: '#CCC', borderWidth: 1, paddingLeft: 50 },
     iconSearchInput: { position: 'absolute', top: 10, left: 22, color: 'orange' },
+    rightSwipeThirdContainer: { backgroundColor: 'green', height: '100%', justifyContent: 'center', paddingLeft: 30 },
 
 });
 
-export default Home;
+export default Folder;
