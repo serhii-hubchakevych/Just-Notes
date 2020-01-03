@@ -126,7 +126,7 @@ export class AddNote extends Component {
       let base64ImageArray = this.state.base64Image;
       images.map(item => {
        ImgToBase64.getBase64String(item.path).then(base64String => {
-          console.log(base64String)
+          // console.log(base64String)
           base64ImageArray.push(base64String) 
           this.setState({
             base64Image:base64ImageArray

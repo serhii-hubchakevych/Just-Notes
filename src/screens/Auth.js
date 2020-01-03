@@ -1,8 +1,8 @@
 import React, {Component} from 'react';
-import {StyleSheet, Text, View, AsyncStorage, BackHandler, PermissionsAndroid, AppState} from 'react-native';
-import {Container, Item, Form, Input, Button, Label, Icon} from 'native-base';
+import { StyleSheet, Text, View, AsyncStorage, BackHandler, Modal } from 'react-native';
+import { Container, Item, Form, Input, Button, Label, Icon } from 'native-base';
 import Loader from 'react-native-modal-loader';
-import {authUserApi} from '../networking/API';
+import { authUserApi } from '../networking/API';
 import Dialog, {
   DialogContent,
   DialogTitle,
@@ -39,6 +39,10 @@ export default class Auth extends Component {
     if (res != undefined) {
       await AsyncStorage.setItem('Folders', JSON.stringify(res[1]))
       await AsyncStorage.setItem('Notes', JSON.stringify(res[2]))
+      let arr = res[3];
+      for ( let i = 0; i < arr.length; i++ ){
+        await AsyncStorage.setItem(arr[i].id, JSON.stringify(arr[i].imageArray))
+      }
       this.setState({
         isLoading: false,
         userName: '',
@@ -126,7 +130,6 @@ export default class Auth extends Component {
             </Button>
           </View>
         </Form>
-
         <Dialog
           footer={
             <DialogFooter>

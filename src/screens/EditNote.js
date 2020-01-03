@@ -1,7 +1,5 @@
-// EditNote.js
-
 import React, {Component} from 'react';
-import {Text, Container, Header, Left, Right, Icon, Footer} from 'native-base';
+import { Container, Header, Left, Right, Icon, Footer} from 'native-base';
 import {StyleSheet, TextInput, AsyncStorage, View, ScrollView, Image, TouchableOpacity} from 'react-native';
 import {updateUserDataApi} from '../networking/API';
 import OfflineNotice from '../parts/OfflineNotice';
@@ -49,7 +47,6 @@ export class EditNote extends Component {
         base64Image: photosFromAsyncStorage
     })
     
-
     this.setState({
       noteId: currentNoteId,
       noteName: currentNoteName,
@@ -88,19 +85,16 @@ export class EditNote extends Component {
       this.props.navigation.navigate('HomeScreen', 'screen:ddd');
     }else{
       this.loadingButton.showLoading(false);
-
       this.props.navigation.navigate('FolderScreen', 'screen:ddd');
     }
     
   }
 
   validateNoteTitle(noteName) {
-    
       this.setState({
         disabledSaveButton: false,
         noteName: noteName,
       });
-    
   }
 
   getCallbackDataFromOfflineNotice = callbackData => {
@@ -108,6 +102,7 @@ export class EditNote extends Component {
       connectionOffline: callbackData,
     });
   };
+
   navigationArrowAction() {
     if (this.state.navigationFlag == 'Home') {
       this.props.navigation.navigate('HomeScreen');
@@ -130,7 +125,6 @@ export class EditNote extends Component {
       await updateUserDataApi(pushNotesToDatabase)
       if ( this.state.inFolder == true ){
         this.loadingButton.showLoading(false);
-
         this.props.navigation.navigate('FolderScreen', 'screen:ddd');
       } else if ( this.state.inFolder == 'ERROR' ) {
         this.loadingButton.showLoading(false);
@@ -139,9 +133,9 @@ export class EditNote extends Component {
       }
     } else {
       this.updateNoteInAsyncStorage()
-      
     }
   }
+
   loadPhotoFromPhone(){
     ImagePicker.openPicker({
       multiple: true,
@@ -243,7 +237,7 @@ export class EditNote extends Component {
                
                         <View key={item.size} style={{position:'relative', padding:10, zIndex:0}}>
                             <Icon name="ios-close-circle" style={{position:'absolute', right:0, zIndex:1, fontSize:30}} onPress={ ()=> this.deletePhotoFromAttached(item) }/>
-                            <Image source={{uri:'data:image/jpg;base64,'+item}} style={{width:150, height:150, }}></Image>  
+                            <Image source={{ uri:'data:image/jpg;base64,'+ item }} style={{width:150, height:150, }}></Image>  
                         </View>
             )  
           } 

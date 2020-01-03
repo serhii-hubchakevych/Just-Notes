@@ -10,7 +10,6 @@ async function registerUserApi(userName, userPassword, userFirstName, userLastNa
         PhoneNumber: userPhoneNumber,
         Email: userEmail
     }
-    console.log(userData)
     try {
         return fetch('https://cb5eza7o22.execute-api.us-west-2.amazonaws.com/Prod/api/Register',
             {
@@ -132,13 +131,13 @@ async function addUserDataApi(noteToPushInDatabase) {
     } else {
         createNewNoteApi = createNewNoteApi + '?token=' + asyncLoginUserData.userToken
     }
-    const newNote = {
-        name: noteToPushInDatabase.name,
-        content: noteToPushInDatabase.content,
-        localId: noteToPushInDatabase.localId,
-        imageArray: imageArray
-    }
-
+    const newNote = [{
+            name: noteToPushInDatabase.name,
+            content: noteToPushInDatabase.content,
+            localId: noteToPushInDatabase.localId
+        },
+            imageArray
+    ]
     try {
         return fetch(createNewNoteApi,
             {
@@ -149,7 +148,6 @@ async function addUserDataApi(noteToPushInDatabase) {
                 },
                 body: JSON.stringify(newNote)
             }).then((response) => {
-                console.log(response)
                 return true;
             }).catch((error) => {
                 alert('Add Note API error')
@@ -165,13 +163,10 @@ async function addUserDataApi(noteToPushInDatabase) {
 async function addUserDataOnSharedScreenApi(userToken, noteTitle, noteText, folderId) {
     var apiUrl = 'https://cb5eza7o22.execute-api.us-west-2.amazonaws.com/Prod/api/Access/Create/Note/'
     apiUrl = apiUrl + folderId + '?token=' + userToken
- 
- 
     const newNote = {
         Name: noteTitle,
         Content: noteText,
     }
-
     try {
         return fetch(apiUrl,
             {
@@ -204,11 +199,12 @@ async function updateUserDataApi(npushNotesToDatabase) {
     let apiUrl = 'https://cb5eza7o22.execute-api.us-west-2.amazonaws.com/Prod/api/Note/'
 
     apiUrl = apiUrl + npushNotesToDatabase.localId + '?token=' + asyncLoginUserData.userToken
-    const newNote = {
+    const newNote = [{
         name: npushNotesToDatabase.name,
         content: npushNotesToDatabase.content,
-        imageArray: imageArray
-    }
+        },
+        imageArray
+    ]
     try {
         return fetch(apiUrl,
             {
@@ -390,9 +386,7 @@ async function shareUserNoteAccessApi(noteId, sharingEmail, userRole) {
         UserEmail: sharingEmail,
         Role: userRole
     }
-    console.log('DATA', shareNoteAccessData)
-    console.log('URI', shareUserNoteAccess)
-    
+  
     try {
         return fetch(shareUserNoteAccess,
             {
@@ -440,7 +434,6 @@ async function shareUserFolderAccessApi(folderId, sharingEmail, userRole) {
                 },
                 body: JSON.stringify(shareFolderAccessData)
             }).then((response) => {
-                console.log('RES', response)
                 if(response.status == '200'){
                     return true;
                 }else{
@@ -509,37 +502,50 @@ async function getSharedDataInFolders(folderId) {
     }
 }
 
-async function syncOfflineData(userNotesAndFolders) {
+async function syncOfflineData(Notes, Folders) {
         let asyncLoginUserData = await AsyncStorage.getItem('asyncLoginUserData');
         asyncLoginUserData = JSON.parse(asyncLoginUserData);
         var syncOfflineNotes = 'https://cb5eza7o22.execute-api.us-west-2.amazonaws.com/Prod/api/Folder/Synchronize?token='
-        syncOfflineNotes = syncOfflineNotes + asyncLoginUserData.userToken
-        console.log('hhuuuiuihiuhuhiuhi',JSON.stringify(userNotesAndFolders))
-        try {
-            return fetch(syncOfflineNotes,
-                {
-                    method: 'POST',
-                    headers: {
-                        Accept: 'application/json',
-                        'Content-Type': 'application/json',
-                    },
-                    body:JSON.stringify(userNotesAndFolders)
-                }).then((response) => {
-                    console.log(response)
-                    if(response.status == '200'){
-                        return true;
-                    }else{
-                        return false;
-                    }
-                }).catch((error) => {
-                    alert('Sync Offline Data error')
-                    console.log('Get User Data in Folder API error', error)
-                })
+        syncOfflineNotes = syncOfflineNotes + asyncLoginUserData.userToken 
+        let noteId = [];
+        Notes.map( item => {
+           noteId.push(item.localId)
+        })
+        let imagesArray = [];
+        for (let i = 0; i < noteId.length; i++){
+            let img = await AsyncStorage.getItem(noteId[i])
+            img = JSON.parse(img)
+            let imgObj = {
+                "id":noteId[i],
+                "imageArray": img
+            }
+            imagesArray.push(imgObj)
         }
-        catch (error) {
-            alert('Get User Data in Folder API error')
-            console.log('Get User Data in Folder API error', error)
-        }   
+        let allUserData = [Folders, Notes, imagesArray]
+        // try {
+        //     return fetch(syncOfflineNotes,
+        //         {
+        //             method: 'POST',
+        //             headers: {
+        //                 Accept: 'application/json',
+        //                 'Content-Type': 'application/json',
+        //             },
+        //             body:JSON.stringify(allUserData)
+        //         }).then((response) => {
+        //             if(response.status == '200'){
+        //                 return true;
+        //             }else{
+        //                 return false;
+        //             }
+        //         }).catch((error) => {
+        //             alert('Sync Offline Data error')
+        //             console.log('Get User Data in Folder API error', error)
+        //         })
+        // }
+        // catch (error) {
+        //     alert('Get User Data in Folder API error')
+        //     console.log('Get User Data in Folder API error', error)
+        // }   
 }
 
 

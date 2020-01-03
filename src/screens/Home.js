@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, AsyncStorage, StyleSheet, TextInput, Picker, BackHandler } from 'react-native';
-import { Container, Header, Left, Right, Icon } from 'native-base';
-import { editUserFolderApi, addUserFolderApi, deleteUserDataApi, syncOfflineData, shareUserNoteAccessApi, shareUserFolderAccessApi } from "../networking/API"
+import { View, Text, ScrollView, TouchableOpacity, AsyncStorage, StyleSheet, TextInput, Picker, BackHandler, Modal, Image } from 'react-native';
+import { Container, Header, Left, Right, Icon, Button, Footer } from 'native-base';
+import { editUserFolderApi, addUserFolderApi, deleteUserDataApi, syncOfflineData, shareUserNoteAccessApi, shareUserFolderAccessApi,  } from "../networking/API"
 import Swipeable from 'react-native-swipeable';
 import SearchInput, { createFilter } from 'react-native-search-filter';
 import Dialog, { DialogContent, DialogTitle, SlideAnimation, DialogFooter, DialogButton } from 'react-native-popup-dialog';
@@ -23,7 +23,6 @@ class Home extends Component {
         };
     constructor(props) {
         super(props);
-
            this.state = {
             userNotes: [],
             userFolders: [],
@@ -53,13 +52,15 @@ class Home extends Component {
             visibleModalShareSuccess:false,
             disableConfirmFolderButton:true,
             itemSearch: { borderBottomWidth: 1, borderColor: "lightgray", display:'none' },
-            clearScreenText:'Tap to add your first note'
+            clearScreenText:'Tap to add your first note',
+            noteId:'',
+            base64Image:[],
+            visibleModalForFullSizeImage: false, 
+            fullSizeImage:''
         };
-
     }
     swipeable = null;
 
- 
     searchUpdated(term) {
 
         if(term == ''){
@@ -71,9 +72,7 @@ class Home extends Component {
 
     async componentDidMount() {
         let asyncLoginUserData = await AsyncStorage.getItem('asyncLoginUserData');
-        console.log('Not parse',asyncLoginUserData)
         asyncLoginUserData = JSON.parse(asyncLoginUserData);
-        console.log('Parse',asyncLoginUserData)
         let asyncNotesArray = await AsyncStorage.getItem('Notes');
         asyncNotesArray = JSON.parse(asyncNotesArray)
         let asyncFoldersArray = await AsyncStorage.getItem('Folders');
@@ -150,6 +149,9 @@ class Home extends Component {
         }
         await AsyncStorage.setItem('Notes', JSON.stringify(arrayAsyncUserNotes))
         await AsyncStorage.removeItem(noteId)
+        this.setState({
+            visibleModalForReadNote:false
+        })
         this.props.navigation.navigate('HomeScreen', 'screen:ddd')
     }
 
@@ -278,11 +280,33 @@ class Home extends Component {
             </TouchableOpacity>]
     }
 
-    readCurrentNote(noteTitle, noteContent) {
+    closeModalAndGoToEditNoteScreen(){
+        this.props.navigation.navigate('EditNoteScreen', {
+            currentNoteId: this.state.noteId,
+            currentNoteName: this.state.noteTitleForReading,
+            currentNoteContent: this.state.noteContentForReading,
+            navigationFlag:'Home',
+            inFolder: null
+        })
+        this.setState({
+            visibleModalForReadNote:false
+        })
+    }
+
+    async readCurrentNote(noteTitle, noteContent, noteId) {
+       
         this.setState({
             noteTitleForReading: noteTitle,
             noteContentForReading: noteContent,
-            visibleModalForReadNote: true
+            visibleModalForReadNote: true,
+            noteIdForSharing:noteId,
+            noteId:noteId
+        })
+        let photosFromAsyncStorage = await AsyncStorage.getItem(noteId)
+        photosFromAsyncStorage = JSON.parse(photosFromAsyncStorage)
+    
+        this.setState({
+            base64Image: photosFromAsyncStorage
         })
     }
 
@@ -380,13 +404,20 @@ class Home extends Component {
         }
         let userNotesAndFolders = asyncFoldersArray.concat(asyncNotesArray)
         if ( this.state.connectionOffline == true && userNotesAndFolders.length > 0){
-            await syncOfflineData(userNotesAndFolders)
+            await syncOfflineData(asyncNotesArray, asyncFoldersArray)
         }
     }
 
     DrawHamburgerMenu(){
         this.setState({
             visibleHamburgerMenu:true
+        })
+    }
+
+    openFullSizeImage(image){
+        this.setState({
+            fullSizeImage:image,
+            visibleModalForFullSizeImage:true
         })
     }
 
@@ -432,7 +463,7 @@ class Home extends Component {
                                         }else if(item.inFolder == null){
                                             return (
                                                 <Swipeable key={item.localId} onRef={ref => this.swipeable = ref} rightButtons={this.rightSwipeButtons(item.localId, item.name, item.content)} style={styles.item}>
-                                                        <TouchableOpacity style={styles.noteView} onPress={() => this.readCurrentNote(item.name, item.content)}>
+                                                        <TouchableOpacity style={styles.noteView} onPress={() => this.readCurrentNote(item.name, item.content, item.localId)}>
                                                         <View>
                                                             <Icon name="ios-document" style={{marginTop:'70%', fontSize:40, color:'orange'}}></Icon>
                                                         </View>
@@ -447,7 +478,7 @@ class Home extends Component {
                                         }else{
                                             return (
                                                 <Swipeable key={item.localId} onRef={ref => this.swipeable = ref} rightButtons={this.rightSwipeButtons(item.localId, item.name, item.content)} style={this.state.itemSearch}>
-                                                        <TouchableOpacity style={styles.noteView} onPress={() => this.readCurrentNote(item.name, item.content)}>
+                                                        <TouchableOpacity style={styles.noteView} onPress={() => this.readCurrentNote(item.name, item.content, item.localId)}>
                                                         <View>
                                                             <Icon name="ios-document" style={{marginTop:'70%', fontSize:40, color:'orange'}}></Icon>
                                                         </View>
@@ -560,21 +591,63 @@ class Home extends Component {
                     </DialogContent>
                 </Dialog>
 
+                <Modal animationType="slide" transparent={true} visible={this.state.visibleModalForReadNote}>
+                    <TouchableOpacity activeOpacity={1} onPressOut={()=>this.setState({visibleModalForReadNote:false})} style={{flex:1, justifyContent: 'center', alignItems: 'center', backgroundColor:'#F8F8F8'}}>
+                        <TouchableOpacity activeOpacity={1} style={{ height: '90%' ,width: '100%', borderRadius:10, borderWidth: 1,borderColor: '#fff'}}>
+                            <Header style = {{ height:50, borderTopRightRadius:10, borderTopLeftRadius:10, borderTopWidth: 1, borderColor: 'white', backgroundColor:'#F8F8F8' }}>
+                                <Text style = {{ fontSize:35 }}>{this.state.noteTitleForReading}</Text>
+                                <Icon onPress={()=>this.setState({visibleModalForReadNote:false})} name="ios-close-circle" style={{fontSize: 45, position:'absolute', right:0}}/>
+                            </Header>
+                            <Container>
+                                <ScrollView>
+                                    <View >
+                                        <Text style = {{ fontSize:20, padding:10}} onPress={ () => this.closeModalAndGoToEditNoteScreen() }>{this.state.noteContentForReading}</Text>
+                                        <ScrollView horizontal style={{ flexDirection:'row' }}>
+                                            {
+                                                this.state.base64Image.map((item) =>
+                                                <TouchableOpacity onPress={ ()=> this.openFullSizeImage(item) }>        
+                                                    <Image source={{ uri:'data:image/jpg;base64,' + item }} style={{ width:150, height:150 }} />
+                                                </TouchableOpacity>
+                                            )}
+                                            </ScrollView>
+                                    </View>
+                                </ScrollView>
+                            </Container>
+                            <Footer style={{ flex:0, backgroundColor:'white' }}>
+                                <Button warning bordered style={{marginRight:'5%', marginTop:5}} onPressIn={ () => this.closeModalAndGoToEditNoteScreen() }>
+                                    <Icon name='ios-open' />
+                                    <Text style={{paddingRight:10}}>Edit</Text>
+                                </Button>
+                                <Button success bordered style={{marginRight:'5%',  marginTop:5}} onPressIn={ () => this.setState({ visibleModalForReadNote:false, visibleModalShareNoteAccess:true})}>
+                                    <Icon name='share' />
+                                    <Text style={{paddingRight:10}}>Share</Text>
+                                </Button>
+                                <Button danger bordered style={{marginRight:'5%',  marginTop:5}} onPressIn={ () => this.deleteNote(this.state.noteId) }>
+                                    <Icon name='trash' />
+                                    <Text style={{paddingRight:10}}>Delete</Text>
+                                </Button>
+                            </Footer>
+                        </TouchableOpacity>
+                    </TouchableOpacity>
+                </Modal>
 
-                <Dialog onHardwareBackPress={()=> this.closeModalOnHardwareButtonPress()} footer={<DialogFooter>
-                    <DialogButton
-                        text="CLOSE"
-                        onPress={() => this.setState({ visibleModalForReadNote: false })}
-                    />
-                </DialogFooter>} dialogAnimation={new SlideAnimation({ slideFrom: 'bottom' })} width={1} height={0.95} dialogTitle={<DialogTitle title={this.state.noteTitleForReading} />} visible={this.state.visibleModalForReadNote} onTouchOutside={() => { this.setState({ visibleModalForReadNote: false }); }}>
-                    <ScrollView>
-                        <DialogContent >
+                <Modal animationType="slide" transparent={true} visible={this.state.visibleModalForFullSizeImage}>
+                    <TouchableOpacity activeOpacity={1} onPressOut={()=>this.setState({visibleModalForFullSizeImage:false})} style={{flex:1, justifyContent: 'center', alignItems: 'center', backgroundColor:'#F8F8F8'}}>
+                        <TouchableOpacity activeOpacity={1} style={{ height: '90%' ,width: '100%', borderRadius:10, borderWidth: 1,borderColor: '#fff'}}>
+                            <Header style = {{ height:50, borderTopRightRadius:10, borderTopLeftRadius:10, borderTopWidth: 1, borderColor: 'white', backgroundColor:'#F8F8F8' }}>
+                                <Icon onPress={()=>this.setState({visibleModalForFullSizeImage:false})} name="ios-close-circle" style={{fontSize: 45, position:'absolute', right:0}}/>
+                            </Header>
+                            <Container>
+                                <View>    
+                                    <Image source={{ uri:'data:image/jpg;base64,' + this.state.fullSizeImage }} style={{ width:'100%', height:'100%' }} />                            
+                                </View>
+                            </Container>
+                        </TouchableOpacity>
+                    </TouchableOpacity>
+                </Modal>
 
-                            <Text style={{ paddingTop: 10, paddingBottom: 10 }}>{this.state.noteContentForReading}</Text>
 
-                        </DialogContent>
-                    </ScrollView>
-                </Dialog>
+
 
                 <Dialog onHardwareBackPress={()=> this.closeModalOnHardwareButtonPress()} footer={<DialogFooter>
                     <DialogButton
